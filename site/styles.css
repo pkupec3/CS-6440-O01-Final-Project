@@ -1,0 +1,68 @@
+/* Core Medical Aesthetics */
+:root {
+    --bg-clinical: #F4F7F6;       /* Clean, clinical white/gray */
+    --border-clinical: #E0E7E9;   /* Very light border for definition */
+    --text-primary: #333333;      /* High contrast dark gray */
+    --accent-blue: #0076CE;       /* Safe "Medical Blue" */
+    --accent-header: #213B49;     /* Deep teal for professional header */
+    --shadow-subtle: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+body.medical-theme {
+    font-family: 'Lato', 'Segoe UI', sans-serif;
+    background-color: var(--bg-clinical);
+    color: var(--text-primary);
+    margin: 0;
+}
+
+/* Header: Dark, Professional, Trustworthy */
+.clinical-header {
+    background-color: var(--accent-header);
+    color: white;
+    padding: 20px;
+    border-bottom: 4px solid var(--accent-blue);
+}
+
+.header-content { display: flex; align-items: center; gap: 15px; }
+.medical-icon { font-size: 2.5em; color: var(--accent-blue); }
+.titles h1 { margin: 0; font-size: 1.6em; }
+.titles p { margin: 5px 0 0; font-size: 0.9em; opacity: 0.8; }
+
+/* Workspace & Table Controls */
+.clinical-workspace { padding: 30px; }
+
+.workspace-toolbar {
+    display: flex; justify-content: space-between; gap: 15px;
+    margin-bottom: 20px;
+}
+
+#table-search {
+    flex-grow: 1; padding: 12px;
+    border: 2px solid var(--border-clinical);
+    border-radius: 6px; background: white;
+    transition: border-color 0.2s;
+}
+#table-search:focus { border-color: var(--accent-blue); outline: none; }
+
+.btn-clinical {
+    background: white; color: var(--accent-blue);
+    border: 2px solid var(--accent-blue);
+    padding: 12px 24px; border-radius: 6px;
+    cursor: pointer; font-weight: bold;
+    transition: all 0.2s;
+}
+.btn-clinical:hover { background: var(--accent-blue); color: white; }
+
+/* Overriding Tabulator Snow for Maximum Clarity */
+#data-table {
+    box-shadow: var(--shadow-subtle);
+    border-radius: 8px; overflow: hidden;
+    background: white;
+}
+
+.tabulator { border: 1px solid var(--border-clinical); }
+.tabulator-header { background-color: white; color: var(--text-primary); font-weight: bold; }
+.tabulator-col-content { border-right: 1px solid var(--border-clinical); }
+.tabulator-row:nth-child(even) { background-color: var(--bg-clinical); } /* Zebra striping */
+.tabulator-row:hover { background-color: #E8F1F6 !important; } /* Light blue hover */
+.tabulator-footer { background-color: white; border-top: 1px solid var(--border-clinical); }

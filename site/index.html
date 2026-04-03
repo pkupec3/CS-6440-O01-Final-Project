@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Public Health SDOH Dashboard (Medical View)</title>
+    
+    <link href="https://unpkg.com/tabulator-tables@5.5.0/dist/css/tabulator_snow.min.css" rel="stylesheet">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="medical-theme">
+
+    <header class="clinical-header">
+        <div class="header-content">
+            <span class="medical-icon">&#10010;</span>
+            <div class="titles">
+                <h1>Population Health Burden & SDOH Registry</h1>
+                <p>Clinical Analytics: Social Determinants Correlation with Healthcare Utilization</p>
+            }
+        }
+    </header>
+
+    <main class="clinical-workspace">
+        <section id="table-controls" class="workspace-toolbar">
+            <input type="text" id="table-search" placeholder="Filter by County, FIPS, or Reason...">
+            <button id="download-csv" class="btn-clinical">Export Clinical Dataset</button>
+        </section>
+
+        <div id="data-table"></div>
+    </main>
+
+    <script src="https://unpkg.com/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
