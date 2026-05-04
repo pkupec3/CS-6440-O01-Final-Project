@@ -1,0 +1,329 @@
+Public Health Dashboard: Social Determinants of Health and Healthcare Burden 
+
+CS 6440: Intro to Health Informatics - Final Submission Paper 
+
+Team 125 - Spring 2026 
+
+ 
+
+Section I: Implementation and Links 
+
+Team Details 
+
+Name 
+
+GT Username 
+
+Email 
+
+Primary Role 
+
+Peter Kupec 
+
+pkupec3 
+
+pkupec3@gatech.edu 
+
+Frontend Development 
+
+Fernando Diaz 
+
+fdiaz37 
+
+fdiaz37@gatech.edu 
+
+Backend and DevOps 
+
+Yiming Chen 
+
+ychen3903 
+
+ychen3903@gatech.edu 
+
+Database Management 
+
+Oluwafisayo Oduyemi 
+
+ooduyemi3 
+
+ooduyemi3@gatech.edu 
+
+Project Manager 
+
+Tim Pham 
+
+phamt371 
+
+tpham371@gatech.edu 
+
+Frontend Development 
+
+ 
+
+External Links 
+
+Georgia Tech GitHub Repository (Source Code, Documentation, Diagrams): 
+
+Deployed Application: https://phamt007.github.io/CS-6440-O01-Final-Project/ 
+
+Recorded Presentation and Demo: 
+
+Final Task Chart 
+
+Sprint 
+
+Original Plan 
+
+Actual Delivery 
+
+Status 
+
+1 
+
+Team formation and area selection 
+
+Team of 5 formed; areas of interest set as public health surveillance, healthcare burden, and SDOH 
+
+Complete 
+
+2 
+
+Project planning, scope, architecture sketch 
+
+8-task plan documented; data sources confirmed (CDC SVI plus Synthea); Sprint 2 architecture diagram produced 
+
+Complete 
+
+3 
+
+Data pipeline plus frontend skeleton plus integration 
+
+process_sdoh.py, process_fhir.py, and merge_data.py written; index.html, main.js, and styles.css built with filter controls and three chart placeholders 
+
+Complete 
+
+4 
+
+Continued integration and deployment 
+
+Site deployed to GitHub Pages; live link tested across browsers; short demo video recorded 
+
+Complete 
+
+5 
+
+Backend completion 
+
+generate_synthea.py built (50,000-patient proportional generation across 50 states); synthea.properties tuned for FHIR R4 only; run_pipeline.py orchestrator with skip logic 
+
+Complete 
+
+6 
+
+Final integration, testing, documentation, presentation 
+
+Frontend wired to merged dataset; cross-browser bug fixing; final paper authored; presentation recorded; GT GitHub repository finalized with required access 
+
+Complete 
+
+ 
+
+Tasks Added Beyond Sprint 2 Plan 
+
+The Sprint 2 plan assumed pre-built FHIR samples and direct zip-to-county alignment. Neither held up once we started building. 
+
+HUD ZIP-to-County crosswalk integration. Synthea attaches addresses by zip code. The CDC SVI keys on county FIPS codes. We added the official HUD residential-ratio crosswalk to map between them, picking the majority county for each zip code. 
+
+Proportional Synthea generation across 50 states. The default Synthea sample is heavily biased toward Massachusetts. We replaced it with a script that calculates each state's share of the U.S. population from the SVI itself and runs Synthea per state with a deterministic seed. 
+
+Inline FHIR extraction with file deletion. Generating 50,000 full patient histories across 50 states would have produced hundreds of gigabytes of FHIR JSON. The pipeline now extracts the encounter records we need from one state's output, deletes the raw bundles, then moves on. 
+
+Pipeline orchestrator with skip logic. As scripts grew interdependent, we added run_pipeline.py to sequence them and to detect cases where the synthetic generator already produced the FHIR CSV so the pipeline does not crash on missing input. 
+
+Tasks Deferred to Future Work 
+
+A few features were on the backlog but did not make it into the final build. They are noted here: 
+
+ER visits per 1,000 population for the choropleth color scale. 
+
+Custom county GeoJSON to replace Plotly's built-in projection. 
+
+ARIA labels and keyboard navigation for accessibility compliance. 
+
+Filtered-data CSV export from the frontend. 
+
+Section II: Project Summary and Discussion 
+
+Background and Need 
+
+Public health officials trying to spot which counties need intervention run into a basic data problem. The CDC publishes the Social Vulnerability Index every two years with county-level numbers on poverty, unemployment, and education. Hospitals and health systems track emergency visits, admissions, and other utilization signals on their own systems. These two streams almost never sit in the same dataset. An official who wants to ask "are counties with higher poverty seeing more ER visits for asthma" has to pull SVI files, pull encounter data, build the join themselves, and figure out a way to look at it. 
+
+That gap is the project's starting point. Building a tool that does the merge once and shows the result on a coordinated map and chart view gives officials a shortcut. 
+
+The empirical case for looking at these two signals together is well established. A 2025 study using Hawaii Health Information Exchange data found that overall SVI score is a strong predictor of emergency department utilization at the census tract level, with the specific strongest predictors varying county by county [8]. A dashboard that lets an official quickly see which SVI components track most closely with ER burden in their own counties is what the project is trying to provide. 
+
+There is a second problem worth naming. Real patient-level encounter data sits behind HIPAA, IRB review, and data use agreements that a student team cannot get on a semester timeline. Synthea, the open-source synthetic patient generator from MITRE, fills that gap by producing FHIR R4 bundles that look like real patient histories but contain no real patients. The bundles include Encounter resources with class.code = 'EMER', period.start timestamps, and SNOMED-CT reasonCode blocks, which is exactly the structure needed to count ER visits by reason and year. 
+
+The need is not for another EHR or another research database. It is for a lightweight, public-facing visualization that shows officials where social burden and healthcare burden line up, using interoperable healthcare data formats so the same approach could later be pointed at real EHR exports through a FHIR endpoint. 
+
+Solution 
+
+The dashboard is a single-page web application sitting on top of a Python ETL pipeline. The split is: heavy lifting happens once, offline, on a developer machine. The browser only reads the resulting CSV. Users get fast loads, and the project hosts on free GitHub Pages with no backend server to maintain. 
+
+Three data sources feed the pipeline. The CDC Social Vulnerability Index provides county-level percentages for poverty, unemployment, and education across five reporting years (2014, 2016, 2018, 2020, 2022). Synthea generates synthetic FHIR R4 patient bundles, distributed across all 50 states proportional to real CDC population counts. The HUD USPS ZIP-County crosswalk translates between zip codes (which Synthea attaches to patients) and county FIPS codes (which the SVI uses). 
+
+The pipeline runs in four stages. process_sdoh.py reads the SVI files, normalizes column names that the CDC has renamed across years (EP_POV versus EP_POV150, for example), and stacks them into a single long table keyed on FIPS code and year. generate_synthea.py loops through every state, runs the Synthea jar with a population count proportional to that state's share of the U.S. total, extracts only the Emergency encounters from each generated bundle, and deletes the raw JSON before moving to the next state. process_fhir.py serves as a fallback for cases where FHIR JSON is supplied directly rather than generated. merge_data.py is where the geographic translation happens. It loads the HUD crosswalk, picks the majority county for each zip code based on residential ratio, pivots ER reasons from rows into columns, and inner-joins the result against the SVI data on FIPS code and year. 
+
+A design choice worth flagging is the direction of aggregation. Synthea operates at zip-code precision. The SVI operates at county precision. The pipeline rolls patients up to counties rather than splitting county statistics down to zip codes. Splitting a 15% county poverty rate evenly across five zip codes assumes uniform distribution inside the county, which is not how poverty actually distributes. Rolling up loses some precision but does not introduce false signal. 
+
+The frontend is plain HTML, JavaScript, and Plotly.js. Three coordinated views sit on the page. A county-level choropleth colored by total ER visits gives the broad geographic view. A time series chart shows ER visits, poverty, and unemployment across the SVI reporting years for whichever county the user clicks. A scatterplot puts a chosen SDOH metric on the x-axis and ER visits on the y-axis, colored by year, so users can see whether the relationship holds across counties. Filters for state and year apply across all three views. 
+
+Synthea's geographic bias was a real problem. The default Synthea sample is heavily skewed toward Massachusetts because that is where the project originated and where its built-in demographic models are most developed. A national dashboard built on a Massachusetts-only sample would be misleading. The proportional generation approach in generate_synthea.py was the answer: every state gets a patient count weighted by its real population from the SVI itself, with a deterministic seed so any team member running the script produces identical output. 
+
+Discussion and Future Work 
+
+Was the project successful? On the original goal, yes. The deployed dashboard loads, filters work, and the three coordinated views show the relationship the project set out to show. A user picks a state and clicks a county on the map. The time series then shows the SDOH-to-ER-visit pattern across SVI reporting years for that county. The data pipeline runs end to end with a single command and produces a reproducible CSV that any team member can regenerate exactly. 
+
+Some limitations are worth being honest about. The choropleth currently colors by raw total ER visits rather than ER visits per 1,000 population. Dense urban counties will always look "high burden" even if the rate is similar to rural counties, just because more patients live there. Normalizing by population would give a fairer comparison and was on the backlog but did not make it into the final build. 
+
+The choropleth also leans on Plotly's built-in USA county boundaries instead of a custom GeoJSON file. This works for the standard view but limits zoom, projection choices, and aggregation at other levels like census tracts or congressional districts. A future version would load a proper county GeoJSON to unlock those. 
+
+The synthetic patient question is bigger than this project. Synthea's models are based on Massachusetts data and general U.S. demographics, not on the actual SDOH gradients in each state. When a Synthea patient in a high-poverty Mississippi county shows up at the ER, the visit reason is not actually correlated to that county's SDOH profile. The pipeline runs cleanly, the geography is real, the SVI percentages come from CDC data, and the ER signal is generated independently of the social signal it gets joined to. This is a known limitation of any synthetic-patient-plus-real-SDOH setup. What the dashboard demonstrates is the analysis pattern and the data flow, not real epidemiological signal. Pointing it at de-identified real EHR data through a FHIR endpoint would be the natural next step. 
+
+A few smaller features would round out the tool for production-style use. A download button that exports the filtered data as CSV would help analysts who want to do their own followup work. ARIA labels and keyboard navigation would bring the site closer to public-sector accessibility requirements. State-level aggregation as a toggle alongside the county view would help with broader regional comparisons. 
+
+References 
+
+1. Centers for Disease Control and Prevention / Agency for Toxic Substances and Disease Registry, Geospatial Research, Analysis & Services Program. CDC/ATSDR Social Vulnerability Index. https://www.atsdr.cdc.gov/place-health/php/svi/index.html 
+
+2. Centers for Disease Control and Prevention / Agency for Toxic Substances and Disease Registry. SVI Data and Documentation Download. https://www.atsdr.cdc.gov/place-health/php/svi/svi-data-documentation-download.html 
+
+3. Walonoski, J., Kramer, M., Nichols, J., Quina, A., Moesel, C., Hall, D., Duffett, C., Dube, K., Gallagher, T., and McLachlan, S. (2018). Synthea: An approach, method, and software mechanism for generating synthetic patients and the synthetic electronic health care record. Journal of the American Medical Informatics Association, 25(3), 230-238. https://doi.org/10.1093/jamia/ocx079 
+
+4. HL7 International. FHIR Release 4 (R4) Specification. https://hl7.org/fhir/R4/ 
+
+5. U.S. Department of Housing and Urban Development, Office of Policy Development and Research. HUD-USPS ZIP Code Crosswalk Files. https://www.huduser.gov/portal/datasets/usps_crosswalk.html 
+
+6. Plotly Technologies Inc. Plotly.js Open-Source Graphing Library. https://plotly.com/javascript/ 
+
+7. U.S. Department of Health and Human Services, Office of Disease Prevention and Health Promotion. Healthy People 2030: Social Determinants of Health. https://odphp.health.gov/healthypeople/priority-areas/social-determinants-health 
+
+8. Pellegrin, K. L., Barbour, T. B., Lozano, A. J., and Hanlon, A. L. (2025). Social Vulnerability Predictors of Acute Care: Leveraging Health Information Exchange Data to Understand Social Determinants at the Census Tract Level in a Correlational Study. Health Science Reports, 8. https://doi.org/10.1002/hsr2.71257 
+
+Section III: Technical Documentation 
+
+User Manual 
+
+This walks through what the dashboard does and how to use each part. No software installation is required; everything runs in a modern browser. 
+
+Accessing the Site 
+
+Open the deployed application URL (listed in Section I) in a current version of Chrome, Firefox, Safari, or Edge. The dashboard fetches the merged CSV automatically on page load. If the chart areas appear blank for more than a few seconds, check the browser developer console for fetch errors. 
+
+Top-of-Page Filters 
+
+Three filters sit above the charts: 
+
+Filter by State. Dropdown listing every state present in the data. Selecting a state restricts the choropleth, time series, and scatterplot to counties in that state. Default is "All States." 
+
+Filter by Year. Dropdown listing every SVI reporting year present in the data (2014, 2016, 2018, 2020, 2022). Selecting a year restricts the choropleth and the scatterplot to that year. The time series chart shows multiple years for a selected county and ignores this filter. 
+
+SDOH Metric for Scatter. Changes which SDOH variable appears on the x-axis of the scatterplot. Options are Poverty Percentage, Unemployment Percentage, and Education (No High School Diploma). 
+
+County Choropleth Map 
+
+The left chart shows U.S. counties colored by total ER visits for the active filter selection. Darker blue indicates higher visit counts. Hovering over a county shows the county name, FIPS code, total ER visits, poverty percentage, unemployment percentage, and year. Clicking a county selects it and updates the time series chart on the right. 
+
+Time Series Chart 
+
+The right chart populates after a county is clicked on the map. Three lines display across SVI reporting years. Total ER visits appears in blue on the primary y-axis. Poverty percentage appears in red on a secondary axis. Unemployment percentage appears in orange on a tertiary axis. The x-axis is year. Hovering shows all three values for the year under the cursor. 
+
+If no county has been clicked yet, the chart displays a placeholder message asking the user to select one. 
+
+Scatterplot 
+
+The bottom chart plots the selected SDOH metric on the x-axis against total ER visits on the y-axis. Each point represents one county-year. Color encodes year, lighter for earlier and darker for later. Hovering over a point shows the county name, state, both axis values, and additional context. 
+
+If a filter selection produces no matching rows, an empty-state message appears in place of the points. 
+
+Suggested Test Path for the TA Mentor 
+
+Load the page and confirm the choropleth, time series placeholder, and scatterplot all render. 
+
+Pick a state from the first filter and confirm the choropleth and scatterplot update. 
+
+Click a county on the choropleth and confirm the time series chart populates with that county's name in the title. 
+
+Switch the SDOH metric and confirm the scatterplot x-axis label and points update. 
+
+Switch to a different year and confirm the choropleth and scatterplot reflect only that year. 
+
+Browser Support 
+
+Chrome 90 and above, Firefox 88 and above, Safari 14 and above, and current Edge are all tested. Mobile browsers on iOS and Android render the dashboard but stack the charts vertically below 768 pixels of viewport width. 
+
+Repository Structure 
+
+The Georgia Tech GitHub repository (link in Section I) contains the full project source. Top-level layout: 
+
+index.html, main.js, styles.css - frontend dashboard files served by GitHub Pages. 
+
+data.csv - final merged dataset, fetched directly by main.js on page load. 
+
+scripts/ - Python ETL pipeline. 
+
+process_sdoh.py - CDC SVI normalization across reporting years. 
+
+process_fhir.py - FHIR JSON extraction (used as a fallback when Synthea bundles are supplied directly). 
+
+generate_synthea.py - Synthea automation, proportional generation across 50 states, inline encounter extraction. 
+
+merge_data.py - geographic translation via the HUD crosswalk and temporal join with the SVI. 
+
+run_pipeline.py - end-to-end orchestrator with skip logic for the FHIR step. 
+
+synthea.properties - Synthea engine configuration (FHIR R4 only, 10 years of history, hospital and practitioner exports disabled). 
+
+data/raw/ - git-ignored. Source files (CDC SVI county CSVs, HUD crosswalk) are placed here for local pipeline runs. 
+
+data/processed/ - intermediate cleaned CSVs (sdoh_cleaned.csv, fhir_burden_cleaned.csv) and the final final_dashboard_data.csv. 
+
+README.md - full setup instructions, design notes, and per-script architectural decisions. 
+
+Running the Pipeline Locally 
+
+The deployed dashboard reads data.csv directly from the repository, so testing the application does not require running the pipeline. Reviewers who want to regenerate the dataset can follow the instructions in README.md. In summary: 
+
+Download CDC SVI county CSVs for 2014, 2016, 2018, 2020, and 2022 into data/raw/SVI_DATA/. 
+
+Place the latest HUD ZIP-County crosswalk CSV into data/raw/ as HUD_ZIP_COUNTY.csv. 
+
+Install Java 17 or higher and place synthea-with-dependencies.jar in scripts/. 
+
+Install the latest version of Synthea from Github. 
+
+Run python scripts/generate_synthea.py to produce the synthetic FHIR-derived ER burden CSV. 
+
+Run python scripts/run_pipeline.py to execute the SVI processing step and the final merge. The orchestrator detects the existing FHIR CSV and skips the redundant extraction step. 
+
+Diagrams and Screenshots 
+
+ARCHITECTURE DIAGRAM HERE 
+
+The Sprint 2 architecture diagram is now out of date. The replacement diagram should show the following components and the data flow between them: 
+
+Three raw inputs: CDC SVI county CSVs (per year), Synthea-generated FHIR R4 bundles (transient), HUD ZIP-County crosswalk CSV. 
+
+Five Python scripts: generate_synthea.py, process_sdoh.py, process_fhir.py, merge_data.py, run_pipeline.py. 
+
+Two intermediate processed CSVs: sdoh_cleaned.csv, fhir_burden_cleaned.csv. 
+
+One final merged CSV: data.csv (also written to the project root for the frontend). 
+
+Frontend layer: index.html, main.js, styles.css, served by GitHub Pages. 
+
+Browser-side libraries: Plotly.js, Tailwind CSS. 
+
+POtential screenshots: full dashboard view with default filters, choropleth with a county selected and the time series populated, scatterplot showing SDOH metric vs. ER visits with year color encoding, state-filtered view to show coordinated filtering across all three charts 
+
+ 

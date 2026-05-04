@@ -1,0 +1,19 @@
+{
+  "runID": "d809e532-8977-43e0-a244-1e0770102525",
+  "seed": 133,
+  "clinicianSeed": 1777854643988,
+  "referenceTime": "20260504",
+  "endTime": "20260504",
+  "version": "v3.4.0-18-ga07a65555\n",
+  "patientCount": 1801,
+  "providerCount": 2599,
+  "payerCount": 9,
+  "javaVersion": "21.0.10",
+  "generate.thread_pool_size": -1,
+  "generatorThreads": 16,
+  "runStartTime": "2026-05-04T00:30:43Z",
+  "runTimeInSeconds": 56,
+  "exporter.years_of_history": "10",
+  "state": "Georgia",
+  "modules": "*"
+}

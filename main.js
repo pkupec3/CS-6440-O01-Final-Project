@@ -1,23 +1,37 @@
 // Global state
 let allData = [];
+let countiesGeoJson = null;
 let selectedCountyFIPS = null;
 let selectedCountyName = null;
+let choroplethPlotInitialized = false;
+let choroplethClickHandlerAttached = false;
+
+const COUNTIES_GEOJSON_URL =
+    'https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json';
 
 // Initialize the dashboard
 document.addEventListener('DOMContentLoaded', async () => {
     try {
         console.log('Loading dashboard data...');
-        await loadData();
+        await Promise.all([loadData(), loadCountiesGeoJson()]);
         populateFilters();
         updateDataInfo();
-        renderCharts();
         setupEventListeners();
+        renderCharts();
         console.log('Dashboard initialized successfully');
     } catch (error) {
         console.error('Error initializing dashboard:', error);
         showError(`Failed to load dashboard data: ${error.message}`);
     }
 });
+
+async function loadCountiesGeoJson() {
+    const response = await fetch(COUNTIES_GEOJSON_URL);
+    if (!response.ok) {
+        throw new Error(`County boundaries failed to load (${response.status})`);
+    }
+    countiesGeoJson = await response.json();
+}
 
 // Load CSV data
 async function loadData() {
@@ -26,10 +40,10 @@ async function loadData() {
         './data.csv',
         '../data/processed/final_dashboard_data.csv'
     ];
-    
+
     let response;
     let lastError;
-    
+
     for (const path of paths) {
         try {
             response = await fetch(path);
@@ -39,11 +53,11 @@ async function loadData() {
             continue;
         }
     }
-    
+
     if (!response || !response.ok) {
         throw new Error('Failed to load data from any source: ' + (lastError?.message || response?.statusText));
     }
-    
+
     const csvText = await response.text();
     allData = parseCSV(csvText);
     console.log(`Loaded ${allData.length} records`);
@@ -51,22 +65,32 @@ async function loadData() {
 
 // Parse CSV with proper handling
 function parseCSV(csvText) {
-    const lines = csvText.trim().split('\n');
-    const headers = lines[0].split(',');
+    const lines = csvText.trim().split(/\r?\n/);
+    const headers = lines[0].split(',').map(h => h.trim());
     const data = [];
 
     for (let i = 1; i < lines.length; i++) {
         const obj = {};
         const values = lines[i].split(',');
-        headers.forEach((header, index) => {
-            const value = values[index] ? values[index].trim() : '';
-            obj[header] = isNaN(value) ? value : parseFloat(value);
+        headers.forEach((h, index) => {
+            const raw = values[index] !== undefined ? values[index].trim() : '';
+            if (h === 'FIPS Code') {
+                obj[h] = raw.padStart(5, '0');
+            } else {
+                obj[h] = isNaN(raw) || raw === '' ? raw : parseFloat(raw);
+            }
         });
         if (obj['FIPS Code']) {
             data.push(obj);
         }
     }
     return data;
+}
+
+function normalizeFips(row) {
+    const v = row['FIPS Code'];
+    if (v === undefined || v === null) return '';
+    return String(v).replace(/\D/g, '').padStart(5, '0').slice(-5);
 }
 
 // Populate dropdown filters
@@ -110,12 +134,30 @@ function getFilteredData() {
     });
 }
 
+function handleChoroplethClick(data) {
+    if (!data.points || !data.points[0]) return;
+    const pt = data.points[0];
+    const fipsCode = pt.location !== undefined ? String(pt.location) : null;
+    if (!fipsCode) return;
+
+    const padded = fipsCode.padStart(5, '0');
+    const countyRow = allData.find(d => normalizeFips(d) === padded);
+    if (!countyRow) {
+        console.warn('No dataset row for FIPS', padded);
+        return;
+    }
+    selectedCountyFIPS = padded;
+    selectedCountyName = `${countyRow.County}, ${countyRow.State}`;
+    console.log(`Selected: ${selectedCountyName}`);
+    renderCharts();
+}
+
 // Render all charts
 function renderCharts() {
     const filtered = getFilteredData();
     renderChoropleth(filtered);
     if (selectedCountyFIPS) {
-        renderTimeSeries(filtered);
+        renderTimeSeries();
     } else {
         renderEmptyTimeSeries();
     }
@@ -124,11 +166,14 @@ function renderCharts() {
 
 // Render choropleth map
 function renderChoropleth(data) {
-    const fipsValues = data.map(d => String(d['FIPS Code']).padStart(5, '0'));
+    if (!countiesGeoJson) {
+        console.error('County GeoJSON not loaded');
+        return;
+    }
+
+    const fipsValues = data.map(d => normalizeFips(d));
     const erVisits = data.map(d => d['Total ER Visits'] || 0);
-    const counties = data.map(d => d['County']);
-    const states = data.map(d => d['State']);
-    const hoverText = data.map((d, i) => 
+    const hoverText = data.map((d, i) =>
         `<b>${d.County}, ${d.State}</b><br>` +
         `FIPS: ${fipsValues[i]}<br>` +
         `Total ER Visits: ${d['Total ER Visits']}<br>` +
@@ -139,10 +184,11 @@ function renderChoropleth(data) {
 
     const choroplethData = [{
         type: 'choropleth',
+        geojson: countiesGeoJson,
+        featureidkey: 'id',
         locations: fipsValues,
         z: erVisits,
         text: hoverText,
-        customdata: fipsValues,
         hoverinfo: 'text',
         colorscale: [
             [0, '#f7fbff'],
@@ -153,13 +199,13 @@ function renderChoropleth(data) {
             [1, '#08306b']
         ],
         locationmode: 'geojson-id',
-        colorbar: { 
+        colorbar: {
             title: 'ER Visits',
             thickness: 15,
             len: 0.7
         },
-        marker: { 
-            line: { 
+        marker: {
+            line: {
                 width: 0.5,
                 color: '#999'
             }
@@ -187,35 +233,32 @@ function renderChoropleth(data) {
         plot_bgcolor: '#f9f9f9'
     };
 
-    Plotly.newPlot('choroplethMap', choroplethData, layout, { responsive: true });
-    
-    // Add click handler for county selection
-    const mapElement = document.getElementById('choroplethMap');
-    mapElement.on('plotly_click', function(data) {
-        if (data.points && data.points[0]) {
-            const fipsCode = data.points[0].location;
-            const countyData = allData.find(d => String(d['FIPS Code']).padStart(5, '0') === fipsCode);
-            if (countyData) {
-                selectedCountyFIPS = fipsCode;
-                selectedCountyName = `${countyData.County}, ${countyData.State}`;
-                console.log(`Selected: ${selectedCountyName}`);
-                renderCharts();
-            }
-        }
-    });
+    const mapDiv = document.getElementById('choroplethMap');
+    const config = { responsive: true };
+
+    if (!choroplethPlotInitialized) {
+        Plotly.newPlot(mapDiv, choroplethData, layout, config);
+        choroplethPlotInitialized = true;
+    } else {
+        Plotly.react(mapDiv, choroplethData, layout, config);
+    }
+
+    if (!choroplethClickHandlerAttached) {
+        mapDiv.on('plotly_click', handleChoroplethClick);
+        choroplethClickHandlerAttached = true;
+    }
 }
 
-// Render time series for selected county
-function renderTimeSeries(data) {
+// Render time series for selected county (all years for that FIPS)
+function renderTimeSeries() {
     if (!selectedCountyFIPS) {
         renderEmptyTimeSeries();
         return;
     }
 
-    const countyData = data.filter(d => {
-        const fipsCode = String(d['FIPS Code']).padStart(5, '0');
-        return fipsCode === selectedCountyFIPS;
-    }).sort((a, b) => a.Year - b.Year);
+    const countyData = allData
+        .filter(d => normalizeFips(d) === selectedCountyFIPS)
+        .sort((a, b) => a.Year - b.Year);
 
     if (countyData.length === 0) {
         console.warn(`No data found for FIPS: ${selectedCountyFIPS}`);
@@ -264,15 +307,15 @@ function renderTimeSeries(data) {
     const layout = {
         title: `Time Series: ${selectedCountyName}`,
         xaxis: { title: 'Year' },
-        yaxis: { 
-            title: 'ER Visits', 
+        yaxis: {
+            title: 'ER Visits',
             color: '#2563eb',
             position: 0
         },
-        yaxis2: { 
-            title: 'Poverty %', 
-            color: '#dc2626', 
-            overlaying: 'y', 
+        yaxis2: {
+            title: 'Poverty %',
+            color: '#dc2626',
+            overlaying: 'y',
             side: 'right',
             position: 0.85
         },
@@ -291,6 +334,7 @@ function renderTimeSeries(data) {
     };
 
     Plotly.newPlot('timeSeriesChart', [trace1, trace2, trace3], layout, { responsive: true });
+    document.getElementById('selectedCountyInfo').textContent = `Showing all years for ${selectedCountyName}`;
 }
 
 // Render empty time series placeholder
@@ -300,7 +344,7 @@ function renderEmptyTimeSeries() {
         y: [],
         type: 'scatter'
     }];
-    
+
     const layout = {
         title: 'Time Series: Select a County',
         xaxis: { title: 'Year' },
@@ -322,10 +366,10 @@ function renderEmptyTimeSeries() {
     document.getElementById('selectedCountyInfo').textContent = 'Select a county from the map above';
 }
 
-// Render scatterplot
+// Render scatterplot (X: total ER visits, Y: selected SDOH metric)
 function renderScatterPlot(data) {
     const metricKey = document.getElementById('metricSelect').value;
-    
+
     if (data.length === 0) {
         const emptyData = [{
             x: [],
@@ -333,9 +377,9 @@ function renderScatterPlot(data) {
             type: 'scatter'
         }];
         const layout = {
-            title: `Healthcare Burden vs. ${metricKey}`,
-            xaxis: { title: metricKey },
-            yaxis: { title: 'Total ER Visits' },
+            title: `${metricKey} vs. Total ER Visits`,
+            xaxis: { title: 'Total ER Visits' },
+            yaxis: { title: metricKey },
             annotations: [{
                 text: 'No data matches your filter selections',
                 xref: 'paper',
@@ -351,14 +395,14 @@ function renderScatterPlot(data) {
         Plotly.newPlot('scatterPlot', emptyData, layout, { responsive: true });
         return;
     }
-    
+
     const scatterData = [{
-        x: data.map(d => d[metricKey]),
-        y: data.map(d => d['Total ER Visits'] || 0),
-        text: data.map(d => 
+        x: data.map(d => d['Total ER Visits'] || 0),
+        y: data.map(d => d[metricKey]),
+        text: data.map(d =>
             `<b>${d.County}, ${d.State}</b><br>` +
-            `${metricKey}: ${d[metricKey].toFixed(2)}%<br>` +
-            `ER Visits: ${d['Total ER Visits']}<br>` +
+            `Total ER Visits: ${d['Total ER Visits']}<br>` +
+            `${metricKey}: ${Number(d[metricKey]).toFixed(2)}%<br>` +
             `Poverty: ${d['Poverty Percentage']}%<br>` +
             `Unemployment: ${d['Unemployment Percentage']}%<br>` +
             `Year: ${d.Year}`
@@ -374,13 +418,13 @@ function renderScatterPlot(data) {
                 [1, '#e34a33']
             ],
             showscale: true,
-            colorbar: { 
+            colorbar: {
                 title: 'Year',
                 thickness: 15,
                 len: 0.7
             },
-            line: { 
-                width: 1, 
+            line: {
+                width: 1,
                 color: '#fff'
             },
             opacity: 0.7
@@ -390,15 +434,15 @@ function renderScatterPlot(data) {
 
     const layout = {
         title: {
-            text: `Healthcare Burden vs. ${metricKey}`,
+            text: `${metricKey} vs. Total ER Visits`,
             font: { size: 16 }
         },
-        xaxis: { 
-            title: metricKey,
+        xaxis: {
+            title: 'Total ER Visits',
             gridcolor: '#e5e5e5'
         },
-        yaxis: { 
-            title: 'Total ER Visits',
+        yaxis: {
+            title: metricKey,
             gridcolor: '#e5e5e5'
         },
         margin: { l: 60, r: 80, t: 40, b: 40 },
@@ -424,13 +468,13 @@ function showError(message) {
 
 // Update data info display
 function updateDataInfo() {
-    const uniqueCounties = new Set(allData.map(d => d['FIPS Code'])).size;
+    const uniqueCounties = new Set(allData.map(d => normalizeFips(d))).size;
     const years = [...new Set(allData.map(d => d.Year))].sort().join(', ');
     const states = [...new Set(allData.map(d => d.State))].sort().join(', ');
-    
+
     const infoElement = document.querySelector('.bg-blue-50 p');
     if (infoElement) {
-        infoElement.textContent = 
+        infoElement.textContent =
             `This dashboard visualizes the relationship between Social Determinants of Health (SDOH)—including poverty, unemployment, and education levels—and healthcare utilization as measured by emergency room visits. ` +
             `Data includes ${uniqueCounties} counties across ${states.split(',').length} states for years: ${years}. ` +
             `Data is sourced from the CDC Social Vulnerability Index and synthetic FHIR patient records.`;
